@@ -89,6 +89,11 @@ validated with zod (plus a check that its size matches the image); if it's
 invalid, the model is shown the problems and asked once more. Progress goes to
 stderr, the JSON to stdout. Set `AI_MODEL` in `.env` to use another Gemini model.
 
+If Gemini is busy (HTTP 503) or rate-limited (HTTP 429), the call is retried up
+to 4 times, waiting 2s, 5s, 10s and 20s. If the model is still overloaded (503)
+after that and `GEMINI_FALLBACK_MODEL` is set in `.env`, that model is tried
+once. Other errors (e.g. 401 bad key, 404 unknown model) fail immediately.
+
 ## API
 
 ### `POST /api/convert`

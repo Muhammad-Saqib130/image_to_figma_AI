@@ -2,6 +2,7 @@ import { GoogleGenAI, type Content } from '@google/genai'
 import { DesignSchema, type Design } from '@framecopy/shared'
 import { imageSize } from 'image-size'
 import { detectImageType } from '../lib/imageType.js'
+import { DEFAULT_RETRY_DELAYS_MS, isOverloaded, withRetry } from './geminiRetry.js'
 import { buildDesignPrompt, buildRetryPrompt } from './prompt.js'
 
 export const DEFAULT_MODEL = 'gemini-2.5-flash'
@@ -9,6 +10,10 @@ export const DEFAULT_MODEL = 'gemini-2.5-flash'
 type Options = {
   apiKey: string
   model?: string
+  /** Tried once if `model` is still overloaded (503) after all retries */
+  fallbackModel?: string
+  /** Waits between retries on 429/503 */
+  retryDelaysMs?: number[]
   /** Called with progress messages, e.g. to log them */
   onLog?: (message: string) => void
 }
@@ -28,7 +33,13 @@ export class InvalidDesignError extends Error {
  * If the first answer is invalid, retries once with the problems listed.
  */
 export async function screenshotToDesign(image: Buffer, options: Options): Promise<Design> {
-  const { apiKey, model = DEFAULT_MODEL, onLog = () => {} } = options
+  const {
+    apiKey,
+    model = DEFAULT_MODEL,
+    fallbackModel,
+    retryDelaysMs = DEFAULT_RETRY_DELAYS_MS,
+    onLog = () => {},
+  } = options
 
   const mimeType = detectImageType(image)
   if (!mimeType) throw new Error('Unsupported image. Use a PNG, JPG or WEBP file.')
@@ -45,15 +56,31 @@ export async function screenshotToDesign(image: Buffer, options: Options): Promi
     },
   ]
 
+  // Switches to the fallback model for the rest of this conversion if the main one is overloaded
+  let activeModel = model
+  const generate = async (): Promise<string> => {
+    const request = (m: string) => () =>
+      ai.models.generateContent({
+        model: m,
+        contents,
+        config: { responseMimeType: 'application/json', temperature: 0.2 },
+      })
+    try {
+      const response = await withRetry(request(activeModel), { delaysMs: retryDelaysMs, onLog })
+      return response.text ?? ''
+    } catch (err) {
+      if (!isOverloaded(err) || !fallbackModel || activeModel === fallbackModel) throw err
+      onLog(`${activeModel} is still busy. Trying fallback model ${fallbackModel} once...`)
+      activeModel = fallbackModel
+      const response = await request(activeModel)()
+      return response.text ?? ''
+    }
+  }
+
   const maxAttempts = 2
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    onLog(`Attempt ${attempt}/${maxAttempts}: asking ${model} (${width}x${height} image)...`)
-    const response = await ai.models.generateContent({
-      model,
-      contents,
-      config: { responseMimeType: 'application/json', temperature: 0.2 },
-    })
-    const text = response.text ?? ''
+    onLog(`Attempt ${attempt}/${maxAttempts}: asking ${activeModel} (${width}x${height} image)...`)
+    const text = await generate()
 
     const result = validate(text, width, height)
     if (result.ok) {

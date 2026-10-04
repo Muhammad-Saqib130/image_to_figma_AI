@@ -27,6 +27,7 @@ if (!apiKey) {
 // npm runs workspace scripts from server/, so resolve against where the user ran the command
 const fullPath = resolve(process.env.INIT_CWD ?? process.cwd(), imagePath)
 const model = process.env.AI_MODEL || DEFAULT_MODEL
+const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || undefined
 
 try {
   const image = await readFile(fullPath)
@@ -34,6 +35,7 @@ try {
   const design = await screenshotToDesign(image, {
     apiKey,
     model,
+    fallbackModel,
     onLog: (message) => console.error(message),
   })
   console.error(`Done in ${((Date.now() - started) / 1000).toFixed(1)}s.`)
@@ -51,7 +53,11 @@ try {
   } else if (err instanceof ApiError && (err.status === 401 || err.status === 403 || err.status === 400) && /key|auth|credential/i.test(err.message)) {
     console.error(`Gemini rejected AI_API_KEY (HTTP ${err.status}). Check the key in server/.env is current.`)
   } else if (err instanceof ApiError && err.status === 429) {
-    console.error('Gemini rate limit or quota reached (HTTP 429). Wait a minute and try again.')
+    console.error('Gemini rate limit or quota reached (HTTP 429), even after retrying. Wait a few minutes and try again.')
+  } else if (err instanceof ApiError && err.status === 503) {
+    console.error('Gemini is overloaded (HTTP 503), even after retrying. Try again later, or set GEMINI_FALLBACK_MODEL in server/.env.')
+  } else if (err instanceof ApiError && err.status === 404) {
+    console.error(`Gemini model not found (HTTP 404). Check AI_MODEL / GEMINI_FALLBACK_MODEL in server/.env: ${err.message}`)
   } else {
     console.error(err instanceof Error ? err.message : err)
   }
