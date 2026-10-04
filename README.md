@@ -74,6 +74,21 @@ Example: [`shared/samples/landing-page.json`](shared/samples/landing-page.json)
 > After changing `shared/src`, run `npm run build -w shared` (or keep
 > `npm run dev -w shared` running) so web and server pick up the changes.
 
+## Screenshot → design script
+
+Sends a screenshot to Gemini (vision) and prints the design JSON. Needs
+`AI_API_KEY` in `server/.env`. Run from the repo root:
+
+```bash
+npm run convert -w server -- path/to/screenshot.png
+npm run convert -w server -- path/to/screenshot.png --out design.json   # also save to a file
+```
+
+The prompt asks for ONLY JSON in the shared layer format. The answer is
+validated with zod (plus a check that its size matches the image); if it's
+invalid, the model is shown the problems and asked once more. Progress goes to
+stderr, the JSON to stdout. Set `AI_MODEL` in `.env` to use another Gemini model.
+
 ## API
 
 ### `POST /api/convert`
