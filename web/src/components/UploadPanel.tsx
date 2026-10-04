@@ -1,13 +1,29 @@
 import { useEffect, useId, useRef, useState, type DragEvent } from 'react'
 import { ACCEPTED_IMAGE_TYPES, formatBytes, validateImage } from '../lib/validateImage'
-import { AlertIcon, CloudUploadIcon, PlusIcon, SparklesIcon, XIcon } from './icons'
+import { AlertIcon, CloudUploadIcon, PlusIcon, SparklesIcon, SpinnerIcon, XIcon } from './icons'
+
+export type ConvertStatus = 'idle' | 'uploading' | 'recreating'
 
 type UploadPanelProps = {
   file: File | null
   onFileChange: (file: File | null) => void
+  status: ConvertStatus
+  /** 0–100 while uploading */
+  uploadPercent: number
+  /** Shown when the last conversion failed */
+  convertError: string | null
+  onConvert: () => void
 }
 
-export function UploadPanel({ file, onFileChange }: UploadPanelProps) {
+export function UploadPanel({
+  file,
+  onFileChange,
+  status,
+  uploadPercent,
+  convertError,
+  onConvert,
+}: UploadPanelProps) {
+  const busy = status !== 'idle'
   const inputId = useId()
   const errorId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -51,6 +67,7 @@ export function UploadPanel({ file, onFileChange }: UploadPanelProps) {
 
   function onDragEnter(e: DragEvent) {
     e.preventDefault()
+    if (busy) return
     dragDepth.current += 1
     setIsDragging(true)
   }
@@ -68,11 +85,15 @@ export function UploadPanel({ file, onFileChange }: UploadPanelProps) {
     e.preventDefault()
     dragDepth.current = 0
     setIsDragging(false)
+    if (busy) return
     handleFiles(e.dataTransfer.files)
   }
 
+  // A problem with the chosen file takes priority over a failed conversion
+  const shownError = error ?? convertError
+
   return (
-    <section className="relative" aria-label="Upload a screenshot">
+    <section className="relative" aria-label="Upload a screenshot" aria-busy={busy}>
       {/* Coloured glow behind the card */}
       <div
         aria-hidden="true"
@@ -85,7 +106,8 @@ export function UploadPanel({ file, onFileChange }: UploadPanelProps) {
         type="file"
         accept={ACCEPTED_IMAGE_TYPES.join(',')}
         className="sr-only"
-        aria-describedby={error ? errorId : undefined}
+        disabled={busy}
+        aria-describedby={shownError ? errorId : undefined}
         onChange={(e) => {
           handleFiles(e.target.files)
           e.target.value = ''
@@ -100,7 +122,7 @@ export function UploadPanel({ file, onFileChange }: UploadPanelProps) {
         className={`relative flex h-80 flex-col overflow-hidden rounded-3xl border bg-gradient-to-br from-zinc-900/90 via-zinc-950/95 to-slate-950/95 backdrop-blur transition-colors sm:aspect-[7/5] sm:h-auto ${
           isDragging
             ? 'border-blue-400/70 ring-4 ring-blue-500/20'
-            : error
+            : shownError
               ? 'border-red-500/50'
               : 'border-white/10'
         }`}
@@ -113,26 +135,30 @@ export function UploadPanel({ file, onFileChange }: UploadPanelProps) {
                 alt={`Preview of ${file.name}`}
                 className="h-full w-full rounded-xl object-contain"
               />
-              <button
-                type="button"
-                onClick={clear}
-                className="absolute top-6 right-6 grid size-9 place-items-center rounded-full bg-black/70 text-zinc-200 ring-1 ring-white/15 backdrop-blur transition hover:bg-black hover:text-white focus-visible:outline-2 focus-visible:outline-blue-400 sm:top-8 sm:right-8"
-                aria-label="Remove image"
-              >
-                <XIcon className="size-4" />
-              </button>
+              {!busy && (
+                <button
+                  type="button"
+                  onClick={clear}
+                  className="absolute top-6 right-6 grid size-9 place-items-center rounded-full bg-black/70 text-zinc-200 ring-1 ring-white/15 backdrop-blur transition hover:bg-black hover:text-white focus-visible:outline-2 focus-visible:outline-blue-400 sm:top-8 sm:right-8"
+                  aria-label="Remove image"
+                >
+                  <XIcon className="size-4" />
+                </button>
+              )}
             </div>
             <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-3 text-sm sm:px-6">
               <p className="min-w-0 truncate text-zinc-300" title={file.name}>
                 {file.name}
                 <span className="ml-2 text-zinc-500">{formatBytes(file.size)}</span>
               </p>
-              <label
-                htmlFor={inputId}
-                className="shrink-0 cursor-pointer text-white underline decoration-white/40 underline-offset-4 hover:decoration-white"
-              >
-                Replace
-              </label>
+              {!busy && (
+                <label
+                  htmlFor={inputId}
+                  className="shrink-0 cursor-pointer text-white underline decoration-white/40 underline-offset-4 hover:decoration-white"
+                >
+                  Replace
+                </label>
+              )}
             </div>
           </div>
         ) : (
@@ -159,6 +185,22 @@ export function UploadPanel({ file, onFileChange }: UploadPanelProps) {
           </label>
         )}
 
+        {busy && (
+          <div className="absolute inset-0 grid place-items-center bg-zinc-950/75 backdrop-blur-[2px]">
+            <div className="flex flex-col items-center gap-3 px-6 text-center">
+              <SpinnerIcon className="size-8 animate-spin text-blue-400" />
+              <p className="text-xl font-medium text-white">
+                {status === 'uploading' ? `Uploading… ${uploadPercent}%` : 'Recreating your design…'}
+              </p>
+              <p className="text-sm text-zinc-400">
+                {status === 'uploading'
+                  ? 'Sending your image to the server'
+                  : 'The AI is turning every element into a layer. This can take up to a minute.'}
+              </p>
+            </div>
+          </div>
+        )}
+
         {isDragging && file && (
           <div className="pointer-events-none absolute inset-0 grid place-items-center bg-zinc-950/80 text-xl font-medium text-white">
             Release to replace
@@ -166,24 +208,34 @@ export function UploadPanel({ file, onFileChange }: UploadPanelProps) {
         )}
       </div>
 
-      {error && (
+      {shownError && (
         <p
           id={errorId}
           role="alert"
           className="mt-3 flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
         >
           <AlertIcon className="mt-0.5 size-4 shrink-0 text-red-400" />
-          {error}
+          {shownError}
         </p>
       )}
 
       <button
         type="button"
-        disabled={!file}
+        disabled={!file || busy}
+        onClick={onConvert}
         className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 px-6 py-5 text-lg font-medium text-white shadow-[0_10px_40px_rgb(37_99_235/0.35)] transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400 disabled:cursor-not-allowed disabled:from-blue-900/70 disabled:to-blue-800/70 disabled:text-white/60 disabled:shadow-none disabled:hover:brightness-100"
       >
-        <SparklesIcon className="size-5" />
-        Convert to Design
+        {busy ? (
+          <>
+            <SpinnerIcon className="size-5 animate-spin" />
+            {status === 'uploading' ? 'Uploading…' : 'Recreating…'}
+          </>
+        ) : (
+          <>
+            <SparklesIcon className="size-5" />
+            {convertError ? 'Try again' : 'Convert to Design'}
+          </>
+        )}
       </button>
 
       <p className="mt-5 flex items-center justify-center gap-2 text-sm text-zinc-400">

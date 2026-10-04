@@ -1,10 +1,11 @@
 import { LayersIcon } from './icons'
 
 type HeaderProps = {
-  hasImage: boolean
+  /** Short status shown on the right, e.g. "Ready to transform" */
+  status: string
 }
 
-export function Header({ hasImage }: HeaderProps) {
+export function Header({ status }: HeaderProps) {
   return (
     <header className="flex items-center justify-between gap-4">
       <a href="/" className="flex items-center gap-3">
@@ -16,7 +17,7 @@ export function Header({ hasImage }: HeaderProps) {
 
       <p className="flex items-center gap-2 text-xs text-zinc-400 sm:text-sm" role="status">
         <span className="size-1.5 rounded-full bg-lime-400 shadow-[0_0_8px_rgb(163_230_53/0.8)]" />
-        {hasImage ? 'Image ready' : 'Ready to transform'}
+        {status}
       </p>
     </header>
   )

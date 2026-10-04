@@ -1,5 +1,8 @@
-import { Router, type ErrorRequestHandler } from 'express'
+import { ApiError } from '@google/genai'
+import { Router, type ErrorRequestHandler, type Response } from 'express'
 import multer from 'multer'
+import { InvalidDesignError, screenshotToDesign } from '../ai/screenshotToDesign.js'
+import { getAiConfig } from '../config.js'
 import { ACCEPTED_IMAGE_TYPES, MAX_IMAGE_BYTES, detectImageType } from '../lib/imageType.js'
 
 const TYPE_ERROR = 'Unsupported file type. Please upload a PNG, JPG or WEBP image.'
@@ -22,7 +25,7 @@ const upload = multer({
 
 export const convertRouter = Router()
 
-convertRouter.post('/convert', upload.single('image'), (req, res) => {
+convertRouter.post('/convert', upload.single('image'), async (req, res) => {
   const file = req.file
   if (!file) {
     res.status(400).json({ ok: false, error: 'No image uploaded. Send it in the "image" field.' })
@@ -34,8 +37,46 @@ convertRouter.post('/convert', upload.single('image'), (req, res) => {
     return
   }
 
-  res.json({ ok: true })
+  const { apiKey, model, fallbackModel } = getAiConfig()
+  if (!apiKey) {
+    console.error('[convert] AI_API_KEY is not set in server/.env')
+    res.status(500).json({ ok: false, error: 'The server is missing its AI API key. Add AI_API_KEY to server/.env.' })
+    return
+  }
+
+  const started = Date.now()
+  console.log(`[convert] ${file.originalname} (${Math.round(file.size / 1024)} KB)`)
+  try {
+    const design = await screenshotToDesign(file.buffer, {
+      apiKey,
+      model,
+      fallbackModel,
+      onLog: (message) => console.log(`[convert] ${message}`),
+    })
+    console.log(`[convert] done in ${((Date.now() - started) / 1000).toFixed(1)}s`)
+    res.json({ ok: true, design })
+  } catch (err) {
+    sendAiError(res, err)
+  }
 })
+
+/** Maps AI failures to a status code and a message that's safe to show on the page */
+function sendAiError(res: Response, err: unknown) {
+  console.error('[convert] failed:', err instanceof Error ? err.message : err)
+
+  if (err instanceof InvalidDesignError) {
+    res.status(502).json({ ok: false, error: "The AI couldn't produce a valid design for this image. Please try again." })
+  } else if (err instanceof ApiError && err.status === 429) {
+    res.status(429).json({ ok: false, error: 'The AI is getting too many requests right now. Please wait a minute and try again.' })
+  } else if (err instanceof ApiError && err.status === 503) {
+    res.status(503).json({ ok: false, error: 'The AI is very busy right now. Please try again in a few minutes.' })
+  } else if (err instanceof ApiError && [400, 401, 403].includes(err.status) && /key|auth|credential/i.test(err.message)) {
+    // Don't leak details about the key to the browser
+    res.status(500).json({ ok: false, error: "The server's AI API key was rejected. Check AI_API_KEY in server/.env." })
+  } else {
+    res.status(500).json({ ok: false, error: 'Something went wrong while recreating the design. Please try again.' })
+  }
+}
 
 // Turn multer errors into clear JSON responses
 const handleUploadError: ErrorRequestHandler = (err, _req, res, next) => {

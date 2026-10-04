@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 @import '@fontsource-variable/outfit';
+/* Inter is the most common font in AI-recreated designs; bundle it so previews match */
+@import '@fontsource-variable/inter';
 
 @theme {
   --font-sans: 'Outfit Variable', ui-sans-serif, system-ui, sans-serif;

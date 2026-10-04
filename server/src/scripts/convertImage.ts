@@ -5,7 +5,8 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { ApiError } from '@google/genai'
-import { DEFAULT_MODEL, InvalidDesignError, screenshotToDesign } from '../ai/screenshotToDesign.js'
+import { InvalidDesignError, screenshotToDesign } from '../ai/screenshotToDesign.js'
+import { getAiConfig } from '../config.js'
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -18,7 +19,7 @@ if (!imagePath) {
   process.exit(1)
 }
 
-const apiKey = process.env.AI_API_KEY
+const { apiKey, model, fallbackModel } = getAiConfig()
 if (!apiKey) {
   console.error('AI_API_KEY is not set. Add it to server/.env.')
   process.exit(1)
@@ -26,8 +27,6 @@ if (!apiKey) {
 
 // npm runs workspace scripts from server/, so resolve against where the user ran the command
 const fullPath = resolve(process.env.INIT_CWD ?? process.cwd(), imagePath)
-const model = process.env.AI_MODEL || DEFAULT_MODEL
-const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || undefined
 
 try {
   const image = await readFile(fullPath)

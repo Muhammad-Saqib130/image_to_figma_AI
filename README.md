@@ -100,17 +100,39 @@ once. Other errors (e.g. 401 bad key, 404 unknown model) fail immediately.
 
 Accepts one image as `multipart/form-data` in the `image` field
 (PNG, JPG or WEBP, max 20 MB). The file type is verified from the file's
-bytes, not just its name or declared type. Currently returns `{ "ok": true }`.
+bytes, not just its name or declared type. The server then sends it to Gemini
+(same code as the script above) and returns the design:
+`{ "ok": true, "design": { ... } }`.
 
 ```bash
 curl -F image=@screenshot.png http://localhost:4000/api/convert
 ```
 
-| Status | When                                        |
-| ------ | ------------------------------------------- |
-| 200    | `{ "ok": true }`                            |
-| 400    | No file, more than one file, or wrong field |
-| 413    | File larger than 20 MB                      |
-| 415    | Not a PNG, JPG or WEBP image                |
+| Status | When                                                   |
+| ------ | ------------------------------------------------------ |
+| 200    | `{ "ok": true, "design": {...} }`                      |
+| 400    | No file, more than one file, or wrong field            |
+| 413    | File larger than 20 MB                                 |
+| 415    | Not a PNG, JPG or WEBP image                           |
+| 429    | Gemini rate limit, still hit after retries             |
+| 500    | Missing/rejected `AI_API_KEY`, or another server error |
+| 502    | Gemini returned an invalid design twice                |
+| 503    | Gemini overloaded, even after retries (and fallback)   |
 
-Errors return `{ "ok": false, "error": "<message>" }`.
+Errors return `{ "ok": false, "error": "<message>" }`, with a message that is
+safe to show on the page.
+
+## Web app flow
+
+1. Choose a screenshot on the home page and click **Convert to Design**.
+2. The button shows **Uploading…** (with progress), then **Recreating…** while
+   the server waits for Gemini. Errors appear under the image with a **Try again** button.
+3. On success the app opens **`/editor`** with the design (a read-only preview
+   plus the JSON). The latest design is kept for the browser tab, so refreshing
+   `/editor` still works.
+
+### Testing without a real Gemini key
+
+The Gemini SDK reads `GOOGLE_GEMINI_BASE_URL`, so you can point the server at a
+local fake Gemini API for testing:
+`GOOGLE_GEMINI_BASE_URL=http://localhost:8099 npm run dev:server`.
