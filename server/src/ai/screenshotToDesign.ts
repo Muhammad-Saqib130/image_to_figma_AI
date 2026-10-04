@@ -1,8 +1,10 @@
-import { GoogleGenAI, type Content } from '@google/genai'
+import { GoogleGenAI, MediaResolution, type Content } from '@google/genai'
 import { DesignSchema, type Design } from '@framecopy/shared'
 import { imageSize } from 'image-size'
 import { detectImageType } from '../lib/imageType.js'
+import { extractImages } from './extractImages.js'
 import { DEFAULT_RETRY_DELAYS_MS, isOverloaded, withRetry } from './geminiRetry.js'
+import { gridToPixels } from './gridToPixels.js'
 import { buildDesignPrompt, buildRetryPrompt } from './prompt.js'
 
 export const DEFAULT_MODEL = 'gemini-2.5-flash'
@@ -14,6 +16,8 @@ type Options = {
   fallbackModel?: string
   /** Waits between retries on 429/503 */
   retryDelaysMs?: number[]
+  /** Cut photos/icons out of the screenshot into image layers (default true) */
+  extractImages?: boolean
   /** Called with progress messages, e.g. to log them */
   onLog?: (message: string) => void
 }
@@ -38,6 +42,7 @@ export async function screenshotToDesign(image: Buffer, options: Options): Promi
     model = DEFAULT_MODEL,
     fallbackModel,
     retryDelaysMs = DEFAULT_RETRY_DELAYS_MS,
+    extractImages: shouldExtractImages = true,
     onLog = () => {},
   } = options
 
@@ -63,7 +68,12 @@ export async function screenshotToDesign(image: Buffer, options: Options): Promi
       ai.models.generateContent({
         model: m,
         contents,
-        config: { responseMimeType: 'application/json', temperature: 0.2 },
+        config: {
+          responseMimeType: 'application/json',
+          temperature: 0.2,
+          // Zoomed-in image reading helps with small text and exact positions
+          mediaResolution: MediaResolution.MEDIA_RESOLUTION_HIGH,
+        },
       })
     try {
       const response = await withRetry(request(activeModel), { delaysMs: retryDelaysMs, onLog })
@@ -82,10 +92,14 @@ export async function screenshotToDesign(image: Buffer, options: Options): Promi
     onLog(`Attempt ${attempt}/${maxAttempts}: asking ${activeModel} (${width}x${height} image)...`)
     const text = await generate()
 
-    const result = validate(text, width, height)
+    const result = validate(text)
     if (result.ok) {
       onLog(`Attempt ${attempt}: valid design.`)
-      return result.design
+      const design = gridToPixels(result.design, width, height)
+      if (!shouldExtractImages) return design
+      const withImages = await extractImages(design, image)
+      onLog(`Cut ${countImages(withImages.layers)} image(s) out of the screenshot.`)
+      return withImages
     }
 
     onLog(`Attempt ${attempt}: invalid answer:\n${result.message}`)
@@ -103,7 +117,15 @@ export async function screenshotToDesign(image: Buffer, options: Options): Promi
 
 type ValidationResult = { ok: true; design: Design } | { ok: false; message: string }
 
-function validate(text: string, width: number, height: number): ValidationResult {
+function countImages(layers: Design['layers']): number {
+  return layers.reduce(
+    (n, l) =>
+      n + (l.type === 'image' && l.src.startsWith('data:') ? 1 : 0) + (l.type === 'frame' ? countImages(l.children) : 0),
+    0,
+  )
+}
+
+function validate(text: string): ValidationResult {
   let json: unknown
   try {
     // Tolerate ```json fences even though the prompt forbids them
@@ -121,13 +143,6 @@ function validate(text: string, width: number, height: number): ValidationResult
       lines.push(`- ...and ${result.error.issues.length - issues.length} more problems`)
     }
     return { ok: false, message: lines.join('\n') }
-  }
-
-  if (result.data.width !== width || result.data.height !== height) {
-    return {
-      ok: false,
-      message: `- width/height must be ${width} and ${height}, got ${result.data.width} and ${result.data.height}.`,
-    }
   }
   return { ok: true, design: result.data }
 }

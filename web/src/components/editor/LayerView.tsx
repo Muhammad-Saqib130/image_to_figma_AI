@@ -1,6 +1,18 @@
 import type { Layer } from '@framecopy/shared'
 import type { CSSProperties } from 'react'
 
+/**
+ * Line breaks come from the screenshot ("\n" in the text), so don't add more:
+ * if the font here is wider than the original, letting the browser wrap would
+ * push words onto extra lines and overlap the layers below.
+ * Only long single-block text with no breaks (taller than one line) wraps.
+ */
+function textWrapping(text: string, height: number, fontSize: number): CSSProperties['whiteSpace'] {
+  if (text.includes('\n')) return 'pre'
+  const isSingleLine = height < fontSize * 1.8
+  return isSingleLine ? 'pre' : 'pre-wrap'
+}
+
 /** Draws one layer (and a frame's children) as an absolutely positioned element */
 export function LayerView({ layer }: { layer: Layer }) {
   const box: CSSProperties = {
@@ -26,7 +38,7 @@ export function LayerView({ layer }: { layer: Layer }) {
             fontSize: layer.fontSize,
             lineHeight: 1.2,
             color: layer.color,
-            whiteSpace: 'pre-wrap',
+            whiteSpace: textWrapping(layer.text, layer.height, layer.fontSize),
           }}
         >
           {layer.text}

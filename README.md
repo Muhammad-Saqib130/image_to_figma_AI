@@ -84,9 +84,12 @@ npm run convert -w server -- path/to/screenshot.png
 npm run convert -w server -- path/to/screenshot.png --out design.json   # also save to a file
 ```
 
-The prompt asks for ONLY JSON in the shared layer format. The answer is
-validated with zod (plus a check that its size matches the image); if it's
-invalid, the model is shown the problems and asked once more. Progress goes to
+The prompt asks for ONLY JSON in the shared layer format, with positions on a
+0–1000 grid (Gemini measures most accurately that way); the server converts them
+to pixels. The answer is validated with zod; if it's invalid, the model is shown
+the problems and asked once more. Photos, logos and icons are then cut out of the
+screenshot into their image layers (as data URIs). Add `--no-images` to keep
+placeholders instead, e.g. to share the JSON without the pictures. Progress goes to
 stderr, the JSON to stdout. Set `AI_MODEL` in `.env` to use another Gemini model.
 
 If Gemini is busy (HTTP 503) or rate-limited (HTTP 429), the call is retried up

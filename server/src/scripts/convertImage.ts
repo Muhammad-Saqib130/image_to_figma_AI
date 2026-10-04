@@ -1,4 +1,4 @@
-// Usage: npm run convert -w server -- <image-path> [--out design.json]
+// Usage: npm run convert -w server -- <image-path> [--out design.json] [--no-images]
 // Sends a screenshot to Gemini and prints the design JSON to stdout.
 // Progress messages go to stderr, so stdout can be redirected to a file.
 import { readFile, writeFile } from 'node:fs/promises'
@@ -10,12 +10,12 @@ import { getAiConfig } from '../config.js'
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
-  options: { out: { type: 'string' } },
+  options: { out: { type: 'string' }, 'no-images': { type: 'boolean' } },
 })
 
 const imagePath = positionals[0]
 if (!imagePath) {
-  console.error('Usage: npm run convert -w server -- <image-path> [--out design.json]')
+  console.error('Usage: npm run convert -w server -- <image-path> [--out design.json] [--no-images]')
   process.exit(1)
 }
 
@@ -35,6 +35,8 @@ try {
     apiKey,
     model,
     fallbackModel,
+    // --no-images keeps placeholders, so the JSON stays small enough to share
+    extractImages: !values['no-images'],
     onLog: (message) => console.error(message),
   })
   console.error(`Done in ${((Date.now() - started) / 1000).toFixed(1)}s.`)
