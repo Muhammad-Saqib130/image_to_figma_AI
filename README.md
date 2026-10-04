@@ -27,7 +27,8 @@ npm run dev:server
 npm run dev:web
 ```
 
-Optionally copy `server/.env.example` to `server/.env` first.
+Before starting the server, copy `server/.env.example` to `server/.env` and paste
+your AI API key after `AI_API_KEY=`. `.env` is git-ignored, so the key stays on your machine.
 
 In development, the web app proxies `/api/*` requests to the server, so
 `fetch('/api/health')` from the frontend reaches Express.
