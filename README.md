@@ -107,9 +107,12 @@ placeholders instead, e.g. to share the JSON without the pictures. Progress goes
 stderr, the JSON to stdout. Set `AI_MODEL` in `.env` to use another Gemini model.
 
 If Gemini is busy (HTTP 503) or rate-limited (HTTP 429), the call is retried up
-to 4 times, waiting 2s, 5s, 10s and 20s. If the model is still overloaded (503)
-after that and `GEMINI_FALLBACK_MODEL` is set in `.env`, that model is tried
-once. Other errors (e.g. 401 bad key, 404 unknown model) fail immediately.
+to 4 times, waiting 2s, 5s, 10s and 20s (longer if Google asks for up to a
+minute). If the model's quota is used up (e.g. the free tier's daily limit),
+it is not retried. If the model is still overloaded (503) after the retries, or
+its quota is used up, and `GEMINI_FALLBACK_MODEL` is set in `.env`, that model
+is tried once; each model has its own quota. Other errors (e.g. 401 bad key,
+404 unknown model) fail immediately.
 
 ## API
 

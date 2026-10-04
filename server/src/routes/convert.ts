@@ -1,6 +1,7 @@
 import { ApiError } from '@google/genai'
 import { Router, type ErrorRequestHandler, type Response } from 'express'
 import multer from 'multer'
+import { formatWait, QuotaExhaustedError } from '../ai/geminiRetry.js'
 import { InvalidDesignError, screenshotToDesign } from '../ai/screenshotToDesign.js'
 import { getAiConfig } from '../config.js'
 import { ACCEPTED_IMAGE_TYPES, MAX_IMAGE_BYTES, detectImageType } from '../lib/imageType.js'
@@ -66,6 +67,14 @@ function sendAiError(res: Response, err: unknown) {
 
   if (err instanceof InvalidDesignError) {
     res.status(502).json({ ok: false, error: "The AI couldn't produce a valid design for this image. Please try again." })
+  } else if (err instanceof QuotaExhaustedError) {
+    const resets = err.retryAfterSeconds ? ` It resets in about ${formatWait(err.retryAfterSeconds)}.` : ''
+    res.status(429).json({
+      ok: false,
+      error:
+        `The AI's ${err.daily ? 'free daily limit' : 'usage limit'} is used up for ${err.models.join(' and ')}.${resets} ` +
+        'To keep going now, set a different AI_MODEL or GEMINI_FALLBACK_MODEL in server/.env and restart the server.',
+    })
   } else if (err instanceof ApiError && err.status === 429) {
     res.status(429).json({ ok: false, error: 'The AI is getting too many requests right now. Please wait a minute and try again.' })
   } else if (err instanceof ApiError && err.status === 503) {

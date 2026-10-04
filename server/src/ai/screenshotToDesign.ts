@@ -3,7 +3,7 @@ import { DesignSchema, type Design } from '@framecopy/shared'
 import { imageSize } from 'image-size'
 import { detectImageType } from '../lib/imageType.js'
 import { extractImages } from './extractImages.js'
-import { DEFAULT_RETRY_DELAYS_MS, isOverloaded, withRetry } from './geminiRetry.js'
+import { DEFAULT_RETRY_DELAYS_MS, isOverloaded, isQuotaExhausted, toQuotaError, withRetry } from './geminiRetry.js'
 import { gridToPixels } from './gridToPixels.js'
 import { buildDesignPrompt, buildRetryPrompt } from './prompt.js'
 
@@ -79,11 +79,19 @@ export async function screenshotToDesign(image: Buffer, options: Options): Promi
       const response = await withRetry(request(activeModel), { delaysMs: retryDelaysMs, onLog })
       return response.text ?? ''
     } catch (err) {
-      if (!isOverloaded(err) || !fallbackModel || activeModel === fallbackModel) throw err
-      onLog(`${activeModel} is still busy. Trying fallback model ${fallbackModel} once...`)
+      // Each model has its own quota, so the fallback helps when the main one is busy or used up
+      const canFallBack = (isOverloaded(err) || isQuotaExhausted(err)) && fallbackModel && activeModel !== fallbackModel
+      if (!canFallBack) throw toQuotaError(err, [activeModel])
+      const why = isOverloaded(err) ? 'is still busy' : 'has used up its quota'
+      onLog(`${activeModel} ${why}. Trying fallback model ${fallbackModel} once...`)
+      const triedModels = [activeModel, fallbackModel]
       activeModel = fallbackModel
-      const response = await request(activeModel)()
-      return response.text ?? ''
+      try {
+        const response = await request(activeModel)()
+        return response.text ?? ''
+      } catch (fallbackErr) {
+        throw toQuotaError(fallbackErr, triedModels)
+      }
     }
   }
 

@@ -5,6 +5,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { ApiError } from '@google/genai'
+import { formatWait, QuotaExhaustedError } from '../ai/geminiRetry.js'
 import { InvalidDesignError, screenshotToDesign } from '../ai/screenshotToDesign.js'
 import { getAiConfig } from '../config.js'
 
@@ -53,6 +54,9 @@ try {
     console.error(`${err.message}. Last response:\n${err.lastResponse}`)
   } else if (err instanceof ApiError && (err.status === 401 || err.status === 403 || err.status === 400) && /key|auth|credential/i.test(err.message)) {
     console.error(`Gemini rejected AI_API_KEY (HTTP ${err.status}). Check the key in server/.env is current.`)
+  } else if (err instanceof QuotaExhaustedError) {
+    const resets = err.retryAfterSeconds ? ` It resets in about ${formatWait(err.retryAfterSeconds)}.` : ''
+    console.error(`${err.message}.${resets} Set a different AI_MODEL or GEMINI_FALLBACK_MODEL in server/.env to keep going.`)
   } else if (err instanceof ApiError && err.status === 429) {
     console.error('Gemini rate limit or quota reached (HTTP 429), even after retrying. Wait a few minutes and try again.')
   } else if (err instanceof ApiError && err.status === 503) {
