@@ -1,0 +1,28 @@
+{
+  "name": "@framecopy/shared",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./samples/*": "./samples/*"
+  },
+  "files": [
+    "dist",
+    "samples"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "tsc && node scripts/validate-samples.mjs"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}
