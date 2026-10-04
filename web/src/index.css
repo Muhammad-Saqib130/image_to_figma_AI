@@ -1,0 +1,21 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/outfit';
+/* Inter is the most common font in AI-recreated designs; bundle it so previews match */
+@import '@fontsource-variable/inter';
+
+@theme {
+  --font-sans: 'Outfit Variable', ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  background-color: #050506;
+  color-scheme: dark;
+}
+
+/* Faint grid behind the whole page */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+}

@@ -1,0 +1,70 @@
+// Usage: npm run convert -w server -- <image-path> [--out design.json] [--no-images]
+// Sends a screenshot to Gemini and prints the design JSON to stdout.
+// Progress messages go to stderr, so stdout can be redirected to a file.
+import { readFile, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { parseArgs } from 'node:util'
+import { ApiError } from '@google/genai'
+import { formatWait, QuotaExhaustedError } from '../ai/geminiRetry.js'
+import { InvalidDesignError, screenshotToDesign } from '../ai/screenshotToDesign.js'
+import { getAiConfig } from '../config.js'
+
+const { positionals, values } = parseArgs({
+  allowPositionals: true,
+  options: { out: { type: 'string' }, 'no-images': { type: 'boolean' } },
+})
+
+const imagePath = positionals[0]
+if (!imagePath) {
+  console.error('Usage: npm run convert -w server -- <image-path> [--out design.json] [--no-images]')
+  process.exit(1)
+}
+
+const { apiKey, model, fallbackModel } = getAiConfig()
+if (!apiKey) {
+  console.error('AI_API_KEY is not set. Add it to server/.env.')
+  process.exit(1)
+}
+
+// npm runs workspace scripts from server/, so resolve against where the user ran the command
+const fullPath = resolve(process.env.INIT_CWD ?? process.cwd(), imagePath)
+
+try {
+  const image = await readFile(fullPath)
+  const started = Date.now()
+  const design = await screenshotToDesign(image, {
+    apiKey,
+    model,
+    fallbackModel,
+    // --no-images keeps placeholders, so the JSON stays small enough to share
+    extractImages: !values['no-images'],
+    onLog: (message) => console.error(message),
+  })
+  console.error(`Done in ${((Date.now() - started) / 1000).toFixed(1)}s.`)
+
+  const json = JSON.stringify(design, null, 2)
+  console.log(json)
+  if (values.out) {
+    const outPath = resolve(process.env.INIT_CWD ?? process.cwd(), values.out)
+    await writeFile(outPath, json + '\n')
+    console.error(`Saved to ${outPath}`)
+  }
+} catch (err) {
+  if (err instanceof InvalidDesignError) {
+    console.error(`${err.message}. Last response:\n${err.lastResponse}`)
+  } else if (err instanceof ApiError && (err.status === 401 || err.status === 403 || err.status === 400) && /key|auth|credential/i.test(err.message)) {
+    console.error(`Gemini rejected AI_API_KEY (HTTP ${err.status}). Check the key in server/.env is current.`)
+  } else if (err instanceof QuotaExhaustedError) {
+    const resets = err.retryAfterSeconds ? ` It resets in about ${formatWait(err.retryAfterSeconds)}.` : ''
+    console.error(`${err.message}.${resets} Set a different AI_MODEL or GEMINI_FALLBACK_MODEL in server/.env to keep going.`)
+  } else if (err instanceof ApiError && err.status === 429) {
+    console.error('Gemini rate limit or quota reached (HTTP 429), even after retrying. Wait a few minutes and try again.')
+  } else if (err instanceof ApiError && err.status === 503) {
+    console.error('Gemini is overloaded (HTTP 503), even after retrying. Try again later, or set GEMINI_FALLBACK_MODEL in server/.env.')
+  } else if (err instanceof ApiError && err.status === 404) {
+    console.error(`Gemini model not found (HTTP 404). Check AI_MODEL / GEMINI_FALLBACK_MODEL in server/.env: ${err.message}`)
+  } else {
+    console.error(err instanceof Error ? err.message : err)
+  }
+  process.exit(1)
+}
