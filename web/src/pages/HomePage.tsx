@@ -4,7 +4,7 @@ import { Header } from '../components/Header'
 import { Hero } from '../components/Hero'
 import { UploadPanel, type ConvertStatus } from '../components/UploadPanel'
 import { ConvertError, convertImage } from '../lib/convertImage'
-import { saveDesign } from '../lib/designStore'
+import { projectNameFromFile, saveProject } from '../lib/designStore'
 
 const headerStatus: Record<ConvertStatus, string> = {
   idle: 'Ready to transform',
@@ -42,8 +42,9 @@ export function HomePage() {
         onUploadProgress: setUploadPercent,
         onUploaded: () => setStatus('recreating'),
       })
-      saveDesign(design)
-      navigate('/editor', { state: { design } })
+      const project = { name: projectNameFromFile(file.name), design }
+      saveProject(project)
+      navigate('/editor', { state: { project } })
     } catch (err) {
       if (controller.signal.aborted) return
       setConvertError(

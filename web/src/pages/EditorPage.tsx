@@ -1,81 +1,88 @@
-import type { Design, Layer } from '@framecopy/shared'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
-import { DesignPreview } from '../components/DesignPreview'
-import { LayersIcon } from '../components/icons'
-import { loadDesign } from '../lib/designStore'
-
-function countLayers(layers: Layer[]): number {
-  return layers.reduce((n, l) => n + 1 + (l.type === 'frame' ? countLayers(l.children) : 0), 0)
-}
+import { Canvas } from '../components/editor/Canvas'
+import { Toolbar } from '../components/editor/Toolbar'
+import { TOOLS, type Tool } from '../components/editor/tools'
+import { TopBar } from '../components/editor/TopBar'
+import { loadProject, type Project } from '../lib/designStore'
 
 export function EditorPage() {
   const location = useLocation()
-  // Prefer the design passed from the home page; fall back to the saved copy after a refresh
-  const [design] = useState<Design | null>(
-    () => (location.state as { design?: Design } | null)?.design ?? loadDesign(),
+  // Prefer the project passed from the home page; fall back to the saved copy after a refresh
+  const [project] = useState<Project | null>(
+    () => (location.state as { project?: Project } | null)?.project ?? loadProject(),
   )
-  const [showJson, setShowJson] = useState(false)
+  const [tool, setTool] = useState<Tool>('select')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+
+  // Tool shortcuts: V, F, T, I, R
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const target = e.target as HTMLElement
+      if (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+      const match = TOOLS.find((t) => t.shortcut.toLowerCase() === e.key.toLowerCase())
+      if (match) setTool(match.id)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), 2500)
+    return () => clearTimeout(timer)
+  }, [toast])
+
+  if (!project) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-[#050506] px-4 text-center font-sans text-zinc-200 antialiased">
+        <div>
+          <h1 className="text-2xl font-semibold text-white">No design yet</h1>
+          <p className="mt-2 text-zinc-400">Upload a screenshot first, then click Convert to Design.</p>
+          <Link
+            to="/"
+            className="mt-6 inline-block rounded-xl bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-500"
+          >
+            Upload a screenshot
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  function handleExport() {
+    if (!project) return
+    const blob = new Blob([JSON.stringify(project.design, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${project.name}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
-    <div className="bg-grid min-h-screen bg-[#050506] font-sans text-zinc-200 antialiased">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-8 lg:px-12">
-        <header className="flex items-center justify-between gap-4">
-          <Link to="/" className="flex items-center gap-3">
-            <span className="grid size-10 place-items-center rounded-xl bg-white text-zinc-900">
-              <LayersIcon className="size-5" />
-            </span>
-            <span className="text-xl font-semibold tracking-tight text-white">FrameCopy</span>
-          </Link>
-          <Link to="/" className="text-sm text-zinc-400 underline-offset-4 hover:text-white hover:underline">
-            ← New screenshot
-          </Link>
-        </header>
-
-        {design ? (
-          <main className="py-10">
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <h1 className="text-3xl font-semibold text-white">Editor</h1>
-                <p className="mt-1 text-zinc-400">
-                  {design.name} · {design.width} × {design.height} · {countLayers(design.layers)} layers
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowJson((v) => !v)}
-                className="rounded-xl border border-white/15 px-4 py-2 text-sm text-zinc-200 transition hover:bg-white/5"
-                aria-expanded={showJson}
-              >
-                {showJson ? 'Hide JSON' : 'Show JSON'}
-              </button>
-            </div>
-
-            <div className="mt-6">
-              <DesignPreview design={design} />
-            </div>
-
-            {showJson && (
-              <pre className="mt-6 max-h-[32rem] overflow-auto rounded-xl border border-white/10 bg-zinc-950 p-4 text-xs leading-relaxed text-zinc-300">
-                {JSON.stringify(design, null, 2)}
-              </pre>
-            )}
-          </main>
-        ) : (
-          <main className="grid min-h-[60vh] place-items-center text-center">
-            <div>
-              <h1 className="text-2xl font-semibold text-white">No design yet</h1>
-              <p className="mt-2 text-zinc-400">Upload a screenshot first, then click Convert to Design.</p>
-              <Link
-                to="/"
-                className="mt-6 inline-block rounded-xl bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-500"
-              >
-                Upload a screenshot
-              </Link>
-            </div>
-          </main>
-        )}
+    <div className="flex h-dvh flex-col overflow-hidden bg-black font-sans text-zinc-200 antialiased">
+      <TopBar
+        projectName={project.name}
+        onExport={handleExport}
+        onCopyToFigma={() => setToast('Copy to Figma is coming soon.')}
+      />
+      <div className="flex min-h-0 flex-1">
+        <Toolbar tool={tool} onToolChange={setTool} />
+        <Canvas design={project.design} tool={tool} selectedId={selectedId} onSelect={setSelectedId} />
       </div>
+
+      {toast && (
+        <p
+          role="status"
+          className="fixed top-20 right-4 z-10 rounded-xl border border-white/10 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 shadow-xl sm:top-24 sm:right-5"
+        >
+          {toast}
+        </p>
+      )}
     </div>
   )
 }
