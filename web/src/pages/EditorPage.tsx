@@ -5,6 +5,9 @@ import { Toolbar } from '../components/editor/Toolbar'
 import { TOOLS, type Tool } from '../components/editor/tools'
 import { TopBar } from '../components/editor/TopBar'
 import { loadProject, type Project } from '../lib/designStore'
+import { useGoogleFonts } from '../lib/googleFonts'
+
+const NO_LAYERS: Project['design']['layers'] = []
 
 export function EditorPage() {
   const location = useLocation()
@@ -15,6 +18,7 @@ export function EditorPage() {
   const [tool, setTool] = useState<Tool>('select')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  useGoogleFonts(project?.design.layers ?? NO_LAYERS)
 
   // Tool shortcuts: V, F, T, I, R
   useEffect(() => {

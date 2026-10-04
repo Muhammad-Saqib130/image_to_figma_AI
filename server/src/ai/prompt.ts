@@ -50,7 +50,8 @@ Text:
 - Each list item / bullet point is its own text layer. Include the bullet character (e.g. "• ") at the start of its text if one is shown.
 - A paragraph can be one text layer. Where a line wraps in the screenshot, put "\\n" at that point so the line breaks match.
 - A text layer's box must tightly fit the text as it appears: x/y = top-left of the first letter's line, width = the widest line, height = all its lines.
-- fontWeight is a number (300, 400, 500, 600, 700, 800). Guess fontFamily from the letter shapes (e.g. "Poppins", "Montserrat", "Inter", "Roboto", "Open Sans", "Lato").
+- fontWeight is a number (300, 400, 500, 600, 700, 800).
+- fontFamily must be the exact name of a Google Fonts family that matches the letter shapes (e.g. "Poppins", "Montserrat", "Inter", "Roboto", "Open Sans", "Lato", "Nunito", "Playfair Display"). The editor loads it from Google Fonts by that name.
 
 Shapes:
 - Start with a full-size "background" rectangle at x 0, y 0, width ${GRID}, height ${GRID}.
