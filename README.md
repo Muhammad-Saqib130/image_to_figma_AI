@@ -5,6 +5,7 @@ Monorepo (npm workspaces) with three packages:
 - **`web/`** — React + Vite + TypeScript + Tailwind CSS (v4)
 - **`server/`** — Node + Express + TypeScript
 - **`shared/`** — `@framecopy/shared`: the design/layer format (zod schemas + types) used by both apps
+- **`figma-plugin/`** — FrameCopy Figma plugin: paste a copied design and it's rebuilt as Figma layers
 
 ## Requirements
 
@@ -46,6 +47,19 @@ Root: `npm run build` builds all packages, `npm test` validates the sample desig
 | `server` | `npm run dev`   | Start server with auto-reload (tsx) |
 | `server` | `npm run build` | Compile TypeScript to `server/dist` |
 | `server` | `npm start`     | Run the compiled server             |
+
+## Copy to Figma
+
+1. **Install the plugin once** (Figma desktop app):
+   Menu → Plugins → Development → **Import plugin from manifest…** and choose
+   `figma-plugin/manifest.json` from this repo. (`npm install` builds the plugin
+   into `figma-plugin/dist`; rebuild with `npm run build -w figma-plugin`.)
+2. In the FrameCopy editor, click **Copy to Figma**.
+3. In Figma: Plugins → Development → **FrameCopy**, click the box and paste (Ctrl+V / ⌘V).
+
+The plugin creates a frame with every layer: frames, rectangles, text (using the
+closest available weight of the font; Inter if the font isn't installed in Figma)
+and images. A design downloaded with **Export** can be pasted the same way.
 
 ## Design format (`shared/`)
 

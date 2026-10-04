@@ -4,13 +4,14 @@
   "workspaces": [
     "shared",
     "web",
-    "server"
+    "server",
+    "figma-plugin"
   ],
   "scripts": {
-    "prepare": "npm run build -w shared",
+    "prepare": "npm run build -w shared && npm run build -w figma-plugin",
     "dev:web": "npm run dev -w web --",
     "dev:server": "npm run dev -w server --",
-    "build": "npm run build -w shared && npm run build -w server && npm run build -w web",
+    "build": "npm run build -w shared && npm run build -w server && npm run build -w web && npm run build -w figma-plugin",
     "test": "npm test -w shared"
   }
 }

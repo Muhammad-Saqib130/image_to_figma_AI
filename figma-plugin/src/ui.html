@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 16px;
+        font: 12px/1.5 Inter, system-ui, sans-serif;
+        color: var(--figma-color-text, #111);
+        background: var(--figma-color-bg, #fff);
+      }
+      h1 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+      p { margin: 0 0 12px; color: var(--figma-color-text-secondary, #666); }
+      textarea {
+        width: 100%;
+        height: 120px;
+        resize: none;
+        padding: 10px;
+        border-radius: 6px;
+        border: 1px dashed var(--figma-color-border-strong, #bbb);
+        background: var(--figma-color-bg-secondary, #f5f5f5);
+        color: inherit;
+        font: inherit;
+      }
+      textarea:focus { outline: 2px solid var(--figma-color-border-brand-strong, #0d99ff); border-color: transparent; }
+      button {
+        margin-top: 10px;
+        width: 100%;
+        padding: 8px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--figma-color-bg-brand, #0d99ff);
+        color: var(--figma-color-text-onbrand, #fff);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.5; cursor: default; }
+      #status { margin-top: 10px; min-height: 18px; }
+      #status.error { color: var(--figma-color-text-danger, #e03e1a); }
+      #status.ok { color: var(--figma-color-text-success, #14ae5c); }
+    </style>
+  </head>
+  <body>
+    <h1>FrameCopy</h1>
+    <p>In FrameCopy, click <b>Copy to Figma</b>. Then click below and press Ctrl+V (⌘V on Mac).</p>
+    <textarea id="input" placeholder="Paste here…" spellcheck="false"></textarea>
+    <button id="create" disabled>Create design</button>
+    <div id="status" role="status"></div>
+
+    <script>
+      const input = document.getElementById('input')
+      const button = document.getElementById('create')
+      const status = document.getElementById('status')
+
+      function setStatus(text, kind) {
+        status.textContent = text
+        status.className = kind || ''
+      }
+
+      function create() {
+        const text = input.value.trim()
+        if (!text) return
+        button.disabled = true
+        setStatus('Creating design…')
+        parent.postMessage({ pluginMessage: { type: 'create', text } }, '*')
+      }
+
+      input.addEventListener('input', () => {
+        button.disabled = !input.value.trim()
+        setStatus('')
+      })
+      // Build straight away on paste; the button is there for typed or edited input
+      input.addEventListener('paste', () => setTimeout(create, 0))
+      button.addEventListener('click', create)
+      input.focus()
+
+      onmessage = (event) => {
+        const msg = event.data.pluginMessage
+        if (!msg) return
+        button.disabled = !input.value.trim()
+        if (msg.type === 'error') setStatus(msg.message, 'error')
+        if (msg.type === 'done') {
+          const fonts = msg.missingFonts.length ? ` Inter used instead of ${msg.missingFonts.join(', ')}.` : ''
+          setStatus(`Done: ${msg.layerCount} layers created.${fonts}`, 'ok')
+          input.value = ''
+        }
+      }
+    </script>
+  </body>
+</html>

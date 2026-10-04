@@ -35,7 +35,7 @@ export function EditorPage() {
 
   useEffect(() => {
     if (!toast) return
-    const timer = setTimeout(() => setToast(null), 2500)
+    const timer = setTimeout(() => setToast(null), 4000)
     return () => clearTimeout(timer)
   }, [toast])
 
@@ -56,6 +56,18 @@ export function EditorPage() {
     )
   }
 
+  async function handleCopyToFigma() {
+    if (!project) return
+    // The FrameCopy Figma plugin recognises this wrapper when it's pasted
+    const payload = JSON.stringify({ framecopy: 1, design: project.design })
+    try {
+      await navigator.clipboard.writeText(payload)
+      setToast('Copied! In Figma, run the FrameCopy plugin and paste (Ctrl+V).')
+    } catch {
+      setToast("Couldn't copy to the clipboard. Use Export and paste the file's contents into the plugin instead.")
+    }
+  }
+
   function handleExport() {
     if (!project) return
     const blob = new Blob([JSON.stringify(project.design, null, 2)], { type: 'application/json' })
@@ -72,7 +84,7 @@ export function EditorPage() {
       <TopBar
         projectName={project.name}
         onExport={handleExport}
-        onCopyToFigma={() => setToast('Copy to Figma is coming soon.')}
+        onCopyToFigma={handleCopyToFigma}
       />
       <div className="flex min-h-0 flex-1">
         <Toolbar tool={tool} onToolChange={setTool} />
